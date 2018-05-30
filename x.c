@@ -642,8 +642,6 @@ setsel(char *str, Time t)
 	XSetSelectionOwner(xw.dpy, XA_PRIMARY, xw.win, t);
 	if (XGetSelectionOwner(xw.dpy, XA_PRIMARY) != xw.win)
 		selclear();
-
-	clipcopy(NULL);
 }
 
 void
@@ -1999,23 +1997,58 @@ run:
 	return 0;
 }
 
+
+int
+getinput(const char * cmd, char * buffer, size_t bufsize) {
+  FILE *p;
+
+  if (!(p = popen(cmd, "r"))) {
+    perror("popen");
+		return 1;
+  }
+
+  if(fgets(buffer, bufsize, p) == NULL) {
+    return 1;
+  }
+
+  pclose(p);
+
+  return 0;
+}
+
+#define OPENCOPIEDCMD "IFS=:; stest -flx $PATH | rofi -dmenu -p Application"
+
 void
 opencopied(const Arg *arg)
 {
 	const size_t max_cmd = 2048;
-	const char *clip = xsel.clipboard;
+	const char *clip = xsel.primary;
+  FILE *p;
+	char *us;
+  int cmd_len;
+
 	if(!clip) {
 		fprintf(stderr, "Warning: nothing copied to clipboard\n");
 		return;
 	}
 
-	/* account for space/quote (3) and \0 (1) */
-	char cmd[max_cmd + strlen(clip) + 4];
-	strncpy(cmd, (char *)arg->v, max_cmd);
-	cmd[max_cmd] = '\0';
+  /* account for space (1) and \0 (1) */
+  char cmd[max_cmd + strlen(clip) + 2];
 
-	strcat(cmd, " ");
+  if(getinput(OPENCOPIEDCMD, cmd, max_cmd))
+    return;
+
+  /* remove trailing newline from the command name */
+  cmd_len = strlen(cmd);
+  fprintf(stderr, "%d", cmd_len);
+  if(cmd[cmd_len - 1] == '\n')
+    cmd[cmd_len - 1] = '\0';
+
+  //cmd[max_cmd] = '\0';
+  strcat(cmd, " ");
 	strcat(cmd, clip);
 
-	system(cmd);
+	if(system(cmd) == -1) {
+    perror("system");
+  }
 }

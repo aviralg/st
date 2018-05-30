@@ -109,6 +109,8 @@ void printscreen(const Arg *);
 void printsel(const Arg *);
 void sendbreak(const Arg *);
 void toggleprinter(const Arg *);
+void openterminal(const Arg *);
+void openeditor(const Arg *);
 
 int tattrset(int);
 void tnew(int, int);
@@ -137,6 +139,9 @@ char *xstrdup(char *);
 
 void kscrolldown(const Arg *);
 void kscrollup(const Arg *);
+
+int getinput(const char *cmd, char *buffer, size_t bufsize);
+void updatetitle();
 
 /* config.h globals */
 extern char *utmp;

@@ -31,7 +31,7 @@
 /* Arbitrary sizes */
 #define UTF_INVALID   0xFFFD
 #define UTF_SIZ       4
-#define ESC_BUF_SIZ   (128*UTF_SIZ)
+#define ESC_BUF_SIZ   (16384*UTF_SIZ)
 #define ESC_ARG_SIZ   16
 #define STR_BUF_SIZ   ESC_BUF_SIZ
 #define STR_ARG_SIZ   ESC_ARG_SIZ
@@ -42,6 +42,10 @@
 #define ISCONTROLC1(c)		(BETWEEN(c, 0x80, 0x9f))
 #define ISCONTROL(c)		(ISCONTROLC0(c) || ISCONTROLC1(c))
 #define ISDELIM(u)		(u && wcschr(worddelimiters, u))
+
+/* constants */
+#define ISO14755CMD		"rofi -dmenu -p Codepoint -fixed-num-lines -lines 0 </dev/null"
+
 
 enum cursor_movement {
 	CURSOR_SAVE,
@@ -2010,6 +2014,25 @@ tprinter(char *s, size_t len)
 	}
 }
 
+void iso14755(const Arg *arg) {
+  FILE *p;
+  char *us, *e, codepoint[9], uc[UTF_SIZ];
+  unsigned long utf32;
+
+  if (!(p = popen(ISO14755CMD, "r")))
+    return;
+
+  us = fgets(codepoint, sizeof(codepoint), p);
+  pclose(p);
+
+  if (!us || *us == '\0' || *us == '-' || strlen(us) > 7)
+    return;
+  if ((utf32 = strtoul(us, &e, 16)) == ULONG_MAX || (*e != '\n' && *e != '\0'))
+    return;
+
+  ttywrite(uc, utf8encode(utf32, uc), 1);
+}
+
 void
 toggleprinter(const Arg *arg)
 {
@@ -2641,4 +2664,90 @@ redraw(void)
 {
 	tfulldirt();
 	draw();
+}
+
+char* getshwd(char * buf, size_t size) {
+  char cmd[64];
+  int nbytes;
+
+  nbytes = snprintf(cmd, sizeof(cmd), "/proc/%d/cwd", pid);
+  if(nbytes < 0) {
+    fprintf(stderr, "snprintf: encoding error\n");
+    return NULL;
+  }
+  else if(nbytes >= sizeof(cmd)) {
+    fprintf(stderr, "snprintf: size of command is longer than %zu bytes\n", size);
+    return NULL;
+  }
+
+  nbytes = readlink(cmd, buf, size);
+  if (nbytes == -1) {
+      perror("readlink");
+      return NULL;
+  }
+  else if(nbytes >= size) {
+    fprintf(stderr, "readlink: contents of %s are longer than %zu bytes\n",
+           cmd, size);
+    return NULL;
+  }
+  buf[nbytes] = '\0';
+  return buf;
+}
+
+void
+createproc(char * cwd, char *args[]) {
+  if(fork() == 0) {
+    if(chdir(cwd) == -1) {
+      perror("chdir");
+      return;
+    }
+    if(execvp(args[0], args) == -1) {
+      perror("execvp");
+    }
+  }
+}
+
+void
+openterminal(const Arg *arg) {
+  char cwd[2048];
+  char terminal[256];
+  char * env_terminal = getenv("TERMINAL");
+  if(env_terminal == NULL) {
+    fprintf(stderr, "st::openterminal: environment variable TERMINAL is empty.\n");
+    return;
+  }
+  strcpy(terminal, env_terminal);
+  if(getshwd(cwd, sizeof(cwd)) != NULL) {
+    char *cmd[] = {terminal, NULL};
+    createproc(cwd, cmd);
+  }
+}
+
+void
+openeditor(const Arg *arg) {
+  char cwd[2048];
+  char editor[256];
+  char * env_editor = getenv("VISUAL");
+  if(env_editor == NULL) {
+    fprintf(stderr, "st::openeditor: environment variable VISUAL is empty.\n");
+    return;
+  }
+  strcpy(editor, env_editor);
+  if(getshwd(cwd, sizeof(cwd)) != NULL) {
+    char *cmd[] = {editor, cwd, NULL};
+    createproc(cwd, cmd);
+  }
+}
+
+void
+updatetitle(const Arg *arg) {
+  char *cmd = "rofi -dmenu -p Title -fixed-num-lines -lines 0 </dev/null";
+  char title[1024];
+  size_t len;
+  if(getinput(cmd, title, sizeof(title)/sizeof(char)))
+    return;
+  len = strlen(title);
+  if(title[len - 1] == '\n')
+    title[len - 1] = '\0';
+  xsettitle(title);
 }
