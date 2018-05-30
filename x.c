@@ -2014,9 +2014,8 @@ opencopied(const Arg *arg)
 	strncpy(cmd, (char *)arg->v, max_cmd);
 	cmd[max_cmd] = '\0';
 
-	strcat(cmd, " \"");
+	strcat(cmd, " ");
 	strcat(cmd, clip);
-	strcat(cmd, "\"");
 
 	system(cmd);
 }
